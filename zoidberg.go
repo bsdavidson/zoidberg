@@ -34,6 +34,11 @@ type Request struct {
 	ReponseCodes map[int]string
 }
 
+// NewZoidberg returns a new zoidberg instance
+func NewZoidberg(w io.WriteCloser, ts *httptest.Server, t *testing.T, requestHeader string) *Zoidberg {
+	return &Zoidberg{w: w, ts: ts, t: t, reqHeader: requestHeader}
+}
+
 // WoopWoopWoop ...
 func (z *Zoidberg) WoopWoopWoop(t *testing.T, req *http.Request, reqBody interface{}, resp *http.Response, body []byte, description string, responses map[int]string) {
 	query := ""
