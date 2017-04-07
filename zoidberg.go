@@ -26,12 +26,13 @@ type Zoidberg struct {
 
 // Request ...
 type Request struct {
-	Method       string
-	Path         string
-	Body         interface{}
-	Description  string
-	Write        bool
-	ReponseCodes map[int]string
+	Method              string
+	Path                string
+	Body                interface{}
+	Description         string
+	Write               bool
+	ReponseCodes        map[int]string
+	ResponseJSONObjects map[string]string
 }
 
 // NewZoidberg returns a new zoidberg instance
@@ -40,22 +41,38 @@ func NewZoidberg(w io.WriteCloser, ts *httptest.Server, t *testing.T, requestHea
 }
 
 // WoopWoopWoop ...
-func (z *Zoidberg) WoopWoopWoop(t *testing.T, req *http.Request, reqBody interface{}, resp *http.Response, body []byte, description string, responses map[int]string) {
+func (z *Zoidberg) WoopWoopWoop(t *testing.T, req *http.Request, reqBody interface{}, resp *http.Response, body []byte, description string, responseCodes map[int]string, responseJSONObjects map[string]string) {
 	query := ""
 	if req.URL.RawQuery != "" {
 		query = fmt.Sprintf("?%s", req.URL.RawQuery)
 	}
 	fmt.Fprintf(z.w, ".. http:%s:: %s%s\n\n", strings.ToLower(req.Method), req.URL.Path, query)
 	fmt.Fprintf(z.w, "   %s\n\n", description)
-	if responses != nil {
-		responseCodes := []int{}
-		for k := range responses {
-			responseCodes = append(responseCodes, k)
+
+	// Write in the response codes
+	if responseCodes != nil {
+		responseCodesOrdered := []int{}
+		for k := range responseCodes {
+			responseCodesOrdered = append(responseCodesOrdered, k)
 		}
-		sort.Ints(responseCodes)
-		fmt.Fprintf(z.w, "     **Response Codes**\n\n")
-		for _, code := range responseCodes {
-			fmt.Fprintf(z.w, "     - %d: %s\n\n", code, responses[code])
+		sort.Ints(responseCodesOrdered)
+		fmt.Fprintf(z.w, "     **Response Code**\n\n")
+		for _, code := range responseCodesOrdered {
+			fmt.Fprintf(z.w, "     - %d: %s\n\n", code, responseCodes[code])
+		}
+	}
+	fmt.Fprintf(z.w, "\n\n")
+
+	// Write in the response codes
+	if responseJSONObjects != nil {
+		responseJSONObjectsOrdered := []string{}
+		for k := range responseJSONObjects {
+			responseJSONObjectsOrdered = append(responseJSONObjectsOrdered, k)
+		}
+		sort.Strings(responseJSONObjectsOrdered)
+		fmt.Fprintf(z.w, "     **Response JSON Object**\n\n")
+		for _, code := range responseJSONObjectsOrdered {
+			fmt.Fprintf(z.w, "     - **%s**: %s\n\n", code, responseJSONObjects[code])
 		}
 	}
 	fmt.Fprintf(z.w, "\n\n")
@@ -125,6 +142,6 @@ func (z *Zoidberg) Ask(r Request) {
 	require.NoError(z.t, err)
 
 	if r.Write {
-		z.WoopWoopWoop(z.t, req, r.Body, resp, b, r.Description, r.ReponseCodes)
+		z.WoopWoopWoop(z.t, req, r.Body, resp, b, r.Description, r.ReponseCodes, r.ResponseJSONObjects)
 	}
 }
