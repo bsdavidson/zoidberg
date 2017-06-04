@@ -18,10 +18,10 @@ import (
 
 // Zoidberg ...
 type Zoidberg struct {
-	w         io.WriteCloser
-	ts        *httptest.Server
-	t         *testing.T
-	reqHeader string
+	w          io.WriteCloser
+	ts         *httptest.Server
+	t          *testing.T
+	reqHeaders map[string]string
 }
 
 // Request ...
@@ -29,18 +29,20 @@ type Request struct {
 	Method              string
 	Path                string
 	Body                interface{}
+	RequestHeaders      map[string]string
+	BasicAuthLogin      [2]string
 	Description         string
 	Write               bool
-	ReponseCodes        map[int]string
+	ResponseCodes       map[int]string
 	ResponseJSONObjects map[string]string
 }
 
 // NewZoidberg returns a new zoidberg instance
-func NewZoidberg(w io.WriteCloser, ts *httptest.Server, t *testing.T, requestHeader string) *Zoidberg {
-	return &Zoidberg{w: w, ts: ts, t: t, reqHeader: requestHeader}
+func NewZoidberg(w io.WriteCloser, ts *httptest.Server, t *testing.T, requestHeaders map[string]string) *Zoidberg {
+	return &Zoidberg{w: w, ts: ts, t: t, reqHeaders: requestHeaders}
 }
 
-// WoopWoopWoop ...
+// WoopWoopWoop executes the request
 func (z *Zoidberg) WoopWoopWoop(t *testing.T, req *http.Request, reqBody interface{}, resp *http.Response, body []byte, description string, responseCodes map[int]string, responseJSONObjects map[string]string) {
 	query := ""
 	if req.URL.RawQuery != "" {
@@ -132,7 +134,11 @@ func (z *Zoidberg) Ask(r Request) {
 	}
 
 	req, err := http.NewRequest(r.Method, fmt.Sprintf("%s%s", z.ts.URL, r.Path), bodyReader)
-	req.Header.Set("Content-Type", z.reqHeader)
+	for k, v := range z.reqHeaders {
+		req.Header.Set(k, v)
+	}
+
+	req.SetBasicAuth(r.BasicAuthLogin[0], r.BasicAuthLogin[1])
 	require.NoError(z.t, err)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -142,6 +148,6 @@ func (z *Zoidberg) Ask(r Request) {
 	require.NoError(z.t, err)
 
 	if r.Write {
-		z.WoopWoopWoop(z.t, req, r.Body, resp, b, r.Description, r.ReponseCodes, r.ResponseJSONObjects)
+		z.WoopWoopWoop(z.t, req, r.Body, resp, b, r.Description, r.ResponseCodes, r.ResponseJSONObjects)
 	}
 }
