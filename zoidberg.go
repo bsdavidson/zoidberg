@@ -26,8 +26,10 @@ type Zoidberg struct {
 
 // A Request contains the possible parameters used in making an API call.
 type Request struct {
-	Method              string
-	Path                string
+	Method      string
+	Path        string
+	RequestPath string
+
 	Body                interface{}
 	RequestHeaders      map[string]string
 	BasicAuthLogin      [2]string
@@ -35,6 +37,7 @@ type Request struct {
 	Write               bool
 	ResponseCodes       map[int]string
 	ResponseJSONObjects map[string]string
+	ParameterValues     map[string]string
 }
 
 // NewZoidberg returns a new zoidberg instance
@@ -63,7 +66,11 @@ func (z *Zoidberg) Ask(r Request) {
 		bodyReader = bytes.NewReader(bodyBytes)
 	}
 
-	req, err := http.NewRequest(r.Method, fmt.Sprintf("%s%s", z.ts.URL, r.Path), bodyReader)
+	if r.RequestPath == "" {
+		r.RequestPath = r.Path
+	}
+
+	req, err := http.NewRequest(r.Method, fmt.Sprintf("%s%s", z.ts.URL, r.RequestPath), bodyReader)
 	for k, v := range z.reqHeaders {
 		req.Header.Set(k, v)
 	}
@@ -78,50 +85,64 @@ func (z *Zoidberg) Ask(r Request) {
 	require.NoError(z.t, err)
 
 	if r.Write {
-		z.getIt(z.t, req, r.Body, resp, b, r.Description, r.ResponseCodes, r.ResponseJSONObjects)
+		z.getIt(z.t, req, r.Body, resp, b, r)
 	}
 }
 
 // getIt executes the request
-func (z *Zoidberg) getIt(t *testing.T, req *http.Request, reqBody interface{}, resp *http.Response, body []byte, description string, responseCodes map[int]string, responseJSONObjects map[string]string) {
+func (z *Zoidberg) getIt(t *testing.T, req *http.Request, reqBody interface{}, resp *http.Response, body []byte, r Request) {
 	query := ""
 	if req.URL.RawQuery != "" {
 		query = fmt.Sprintf("?%s", req.URL.RawQuery)
 	}
-	fmt.Fprintf(z.w, ".. http:%s:: %s%s\n\n", strings.ToLower(req.Method), req.URL.Path, query)
-	fmt.Fprintf(z.w, "   %s\n\n", description)
+	fmt.Fprintf(z.w, ".. http:%s:: %s\n\n", strings.ToLower(req.Method), req.URL.Path)
+	fmt.Fprintf(z.w, "   %s\n\n", r.Description)
 
 	// Write in the response codes
-	if responseCodes != nil {
+	if r.ResponseCodes != nil {
 		responseCodesOrdered := []int{}
-		for k := range responseCodes {
+		for k := range r.ResponseCodes {
 			responseCodesOrdered = append(responseCodesOrdered, k)
 		}
 		sort.Ints(responseCodesOrdered)
 		fmt.Fprintf(z.w, "     **Response Code**\n\n")
 		for _, code := range responseCodesOrdered {
-			fmt.Fprintf(z.w, "     - %d: %s\n\n", code, responseCodes[code])
+			fmt.Fprintf(z.w, "     - %d: %s\n\n", code, r.ResponseCodes[code])
+		}
+	}
+	fmt.Fprintf(z.w, "\n\n")
+
+	// Write in the parameters
+	if r.ParameterValues != nil {
+		parameterValuesOrdered := []string{}
+		for k := range r.ParameterValues {
+			parameterValuesOrdered = append(parameterValuesOrdered, k)
+		}
+		sort.Strings(parameterValuesOrdered)
+		fmt.Fprintf(z.w, "     **Query Parameters**\n\n")
+		for _, param := range parameterValuesOrdered {
+			fmt.Fprintf(z.w, "     - **%s**: %s\n\n", param, r.ParameterValues[param])
 		}
 	}
 	fmt.Fprintf(z.w, "\n\n")
 
 	// Write in the response codes
-	if responseJSONObjects != nil {
+	if r.ResponseJSONObjects != nil {
 		responseJSONObjectsOrdered := []string{}
-		for k := range responseJSONObjects {
+		for k := range r.ResponseJSONObjects {
 			responseJSONObjectsOrdered = append(responseJSONObjectsOrdered, k)
 		}
 		sort.Strings(responseJSONObjectsOrdered)
 		fmt.Fprintf(z.w, "     **Response JSON Object**\n\n")
 		for _, code := range responseJSONObjectsOrdered {
-			fmt.Fprintf(z.w, "     - **%s**: %s\n\n", code, responseJSONObjects[code])
+			fmt.Fprintf(z.w, "     - **%s**: %s\n\n", code, r.ResponseJSONObjects[code])
 		}
 	}
 	fmt.Fprintf(z.w, "\n\n")
 
 	fmt.Fprintf(z.w, "   Example request:\n\n")
 	fmt.Fprintf(z.w, "   .. sourcecode:: http\n\n")
-	fmt.Fprintf(z.w, "      %s %s %s\n", req.Method, req.URL.Path, req.Proto)
+	fmt.Fprintf(z.w, "      %s %s%s %s\n", req.Method, req.URL.Path, query, req.Proto)
 	for k := range req.Header {
 		fmt.Fprintf(z.w, "      %s: %s\n", k, req.Header.Get(k))
 	}
