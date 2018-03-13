@@ -7,16 +7,16 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
 
-	"net/http/httptest"
-
 	"github.com/stretchr/testify/require"
 )
 
-// Zoidberg ...
+// Zoidberg encapsulates the testing environment and provides access to
+// the resources needed to read and parse the API calls.
 type Zoidberg struct {
 	w          io.WriteCloser
 	ts         *httptest.Server
@@ -24,7 +24,7 @@ type Zoidberg struct {
 	reqHeaders map[string]string
 }
 
-// Request ...
+// A Request contains the possible parameters used in making an API call.
 type Request struct {
 	Method              string
 	Path                string
@@ -42,8 +42,48 @@ func NewZoidberg(w io.WriteCloser, ts *httptest.Server, t *testing.T, requestHea
 	return &Zoidberg{w: w, ts: ts, t: t, reqHeaders: requestHeaders}
 }
 
-// WoopWoopWoop executes the request
-func (z *Zoidberg) WoopWoopWoop(t *testing.T, req *http.Request, reqBody interface{}, resp *http.Response, body []byte, description string, responseCodes map[int]string, responseJSONObjects map[string]string) {
+// Head Creates a header section
+func (z *Zoidberg) Head(title, underline string) {
+	fmt.Fprintf(z.w, "%s\n", title)
+	fmt.Fprintf(z.w, "%s\n\n", strings.Repeat(underline, len(title)))
+}
+
+// Says outputs some paragraph text.
+func (z *Zoidberg) Says(text string) {
+	fmt.Fprintf(z.w, "  %s\n\n", text)
+}
+
+// Ask is a helper function that takes a Request, executes and asserts the response
+func (z *Zoidberg) Ask(r Request) {
+	// t.Log("TestRequest", method, path, body)
+	var bodyReader io.Reader
+	if r.Body != nil {
+		bodyBytes, err := json.Marshal(r.Body)
+		require.NoError(z.t, err)
+		bodyReader = bytes.NewReader(bodyBytes)
+	}
+
+	req, err := http.NewRequest(r.Method, fmt.Sprintf("%s%s", z.ts.URL, r.Path), bodyReader)
+	for k, v := range z.reqHeaders {
+		req.Header.Set(k, v)
+	}
+
+	req.SetBasicAuth(r.BasicAuthLogin[0], r.BasicAuthLogin[1])
+	require.NoError(z.t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(z.t, err)
+
+	b, err := ioutil.ReadAll(resp.Body)
+	require.NoError(z.t, err)
+
+	if r.Write {
+		z.getIt(z.t, req, r.Body, resp, b, r.Description, r.ResponseCodes, r.ResponseJSONObjects)
+	}
+}
+
+// getIt executes the request
+func (z *Zoidberg) getIt(t *testing.T, req *http.Request, reqBody interface{}, resp *http.Response, body []byte, description string, responseCodes map[int]string, responseJSONObjects map[string]string) {
 	query := ""
 	if req.URL.RawQuery != "" {
 		query = fmt.Sprintf("?%s", req.URL.RawQuery)
@@ -110,44 +150,4 @@ func (z *Zoidberg) WoopWoopWoop(t *testing.T, req *http.Request, reqBody interfa
 		fmt.Fprintf(z.w, "      %s\n\n", b)
 	}
 
-}
-
-// WhyNot Creates a header section
-func (z *Zoidberg) WhyNot(title, underline string) {
-	fmt.Fprintf(z.w, "%s\n", title)
-	fmt.Fprintf(z.w, "%s\n\n", strings.Repeat(underline, len(title)))
-}
-
-// Says outputs some paragraph text.
-func (z *Zoidberg) Says(text string) {
-	fmt.Fprintf(z.w, "  %s\n\n", text)
-}
-
-// Ask is a helper function that takes a number of parmeters, makes a request, and asserts the response
-func (z *Zoidberg) Ask(r Request) {
-	// t.Log("TestRequest", method, path, body)
-	var bodyReader io.Reader
-	if r.Body != nil {
-		bodyBytes, err := json.Marshal(r.Body)
-		require.NoError(z.t, err)
-		bodyReader = bytes.NewReader(bodyBytes)
-	}
-
-	req, err := http.NewRequest(r.Method, fmt.Sprintf("%s%s", z.ts.URL, r.Path), bodyReader)
-	for k, v := range z.reqHeaders {
-		req.Header.Set(k, v)
-	}
-
-	req.SetBasicAuth(r.BasicAuthLogin[0], r.BasicAuthLogin[1])
-	require.NoError(z.t, err)
-
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(z.t, err)
-
-	b, err := ioutil.ReadAll(resp.Body)
-	require.NoError(z.t, err)
-
-	if r.Write {
-		z.WoopWoopWoop(z.t, req, r.Body, resp, b, r.Description, r.ResponseCodes, r.ResponseJSONObjects)
-	}
 }
